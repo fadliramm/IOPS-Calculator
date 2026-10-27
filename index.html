@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IOPS &amp; Throughput Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: spec-sheet instrument panel — two columns of solver modules, stacked on phones */
+:root {
+  --bg: #EEF1F3;
+  --panel: #FFFFFF;
+  --ink: #15212B;
+  --muted: #5B6B78;
+  --line: #D3DAE0;
+  --accent: #0A6C8F;
+  --accent-soft: #DCEEF4;
+  --write: #C2571A;
+  --warn: #9A5200;
+  --warn-soft: #FBEBD6;
+  --field: #F6F8F9;
+  --ok: #2B7A4B;
+  --ok-soft: #DDF0E4;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F161C; --panel: #172129; --ink: #E4EBF0; --muted: #8DA0AE; --line: #2A3843;
+    --accent: #4DB6DA; --accent-soft: #17323D; --write: #F08A4B; --warn: #F0A44B; --warn-soft: #3A2A14;
+    --field: #111A21; --ok: #5FC28A; --ok-soft: #173326; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F161C; --panel: #172129; --ink: #E4EBF0; --muted: #8DA0AE; --line: #2A3843;
+  --accent: #4DB6DA; --accent-soft: #17323D; --write: #F08A4B; --warn: #F0A44B; --warn-soft: #3A2A14;
+  --field: #111A21; --ok: #5FC28A; --ok-soft: #173326; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-inline: 16px; padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; border-bottom: 2px solid var(--ink); padding-bottom: 14px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(30px, 5vw, 44px); line-height: 1; margin: 0; letter-spacing: 0.01em; text-transform: uppercase; text-wrap: balance; }
+h1 span { color: var(--accent); }
+header p { margin: 0; color: var(--muted); max-width: 52ch; font-size: 14px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.module { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.module-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1.1; }
+.tag { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+
+label, .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.fields { display: grid; gap: 12px; }
+.fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fields.auto { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+@media (max-width: 520px) { .fields.two { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.input-row { display: flex; min-width: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--field); overflow: hidden; }
+.input-row:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="number"], select {
+  font-family: var(--font-mono); font-size: 16px; color: var(--ink); background: transparent;
+  border: 0; padding: 9px 10px; min-width: 0; width: 100%; font-variant-numeric: tabular-nums;
+}
+input[type="number"]:focus, select:focus { outline: none; }
+.input-row select { width: auto; flex: none; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); padding-right: 6px; cursor: pointer; }
+select.solo { border: 1px solid var(--line); border-radius: 4px; background: var(--field); font-family: var(--font-body); font-size: 14px; cursor: pointer; }
+select.solo:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+select option { background: var(--panel); color: var(--ink); }
+
+/* Solver rows: one value is computed, the others are inputs */
+.solver { display: flex; flex-direction: column; gap: 10px; }
+.solve-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 12px; }
+@media (max-width: 420px) { .solve-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+.solve-btn {
+  font-family: var(--font-body); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  text-align: left; background: transparent; color: var(--muted); border: 1px dashed var(--line); border-radius: 4px;
+  padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; line-height: 1.2;
+}
+.solve-btn small { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; }
+.solve-btn:hover { border-color: var(--accent); color: var(--ink); }
+.solve-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.solve-row.is-solved .solve-btn { background: var(--accent); border: 1px solid var(--accent); color: var(--panel); }
+.solve-row.is-solved .input-row { background: var(--accent-soft); border-color: var(--accent); }
+.solve-row.is-solved input { font-weight: 500; color: var(--ink); }
+
+/* Readouts */
+.readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.readout { background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.readout .v { font-family: var(--font-mono); font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.readout .v.big { font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1; color: var(--accent); }
+.readout .u { font-size: 12px; color: var(--muted); }
+
+.formula { font-family: var(--font-mono); font-size: 12px; color: var(--muted); background: var(--field); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
+
+/* Table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); background: var(--field); }
+td { font-family: var(--font-mono); font-size: 13px; }
+tr:last-child td { border-bottom: 0; }
+tr.current td { background: var(--accent-soft); font-weight: 500; }
+tr.current td:first-child::after { content: " ◂"; color: var(--accent); }
+td .note { font-family: var(--font-body); font-size: 11px; color: var(--muted); margin-left: 6px; }
+
+/* Mix bar */
+.mix { display: flex; flex-direction: column; gap: 6px; }
+.bar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; background: var(--field); }
+.bar .r { background: var(--accent); }
+.bar .w { background: var(--write); }
+.bar .s { background: var(--muted); }
+.cap-block { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.range-head { display: flex; justify-content: space-between; align-items: baseline; }
+.range-head output { font-family: var(--font-mono); font-size: 13px; }
+
+.chip { align-self: flex-start; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); }
+.sizing { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; border-top: 1px solid var(--line); padding-top: 16px; }
+.sizing .answer { text-align: right; }
+.sizing .answer .v { font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1; color: var(--accent); }
+
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+
+/* Workload presets */
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.preset {
+  font-family: var(--font-body); font-size: 13px; color: var(--ink); background: var(--field);
+  border: 1px solid var(--line); border-radius: 4px; padding: 7px 12px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.2; text-align: left;
+}
+.preset small { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.preset:hover { border-color: var(--accent); }
+.preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.preset[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.preset[aria-pressed="true"] small { color: var(--panel); opacity: 0.85; }
+
+/* Bottleneck */
+.bn-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; align-items: start; }
+@media (max-width: 980px) { .bn-layout { grid-template-columns: minmax(0, 1fr); } }
+.bn-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 640px) { .bn-inputs { grid-template-columns: minmax(0, 1fr); } }
+.group { display: flex; flex-direction: column; gap: 10px; border-top: 2px solid var(--ink); padding-top: 10px; min-width: 0; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 18px; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+.group .sum { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.group .sum b { color: var(--ink); font-weight: 500; }
+.bn-result { display: flex; flex-direction: column; gap: 14px; background: var(--field); border-radius: 6px; padding: 16px; min-width: 0; }
+.limits { display: flex; flex-direction: column; gap: 10px; }
+.limit { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+.limit .name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.limit .track { height: 10px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.limit .fill { height: 100%; background: var(--accent); }
+.limit .val { grid-column: 2; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.limit .val b { color: var(--ink); font-weight: 500; }
+.limit.is-min .name { color: var(--write); }
+.limit.is-min .fill { background: var(--write); }
+.limit.is-min .val b { color: var(--write); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .bar .r, .bar .w, .limit .fill { transition: width 0.2s ease; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>IOPS <span>&amp;</span> Throughput Calculator</h1>
+    <p>Convert between IOPS, block size and bandwidth, size a RAID array, find the system bottleneck across disks, CPU, memory, controllers and network, and relate queue depth to latency. Click a field's label to make it the value being solved.</p>
+  </header>
+
+  <!-- Workload presets -->
+  <section class="module" aria-labelledby="wl-h">
+    <div class="module-head">
+      <h2 id="wl-h">Workload</h2>
+      <span class="tag">SETS BLOCK SIZE · READ/WRITE MIX</span>
+    </div>
+    <div class="presets" id="presets" role="group" aria-label="Workload presets"></div>
+    <p class="hint" id="wl-hint">Pick a workload to fill in a typical block size and read/write mix, then adjust any value yourself.</p>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+      <!-- Converter -->
+      <section class="module" aria-labelledby="conv-h">
+        <div class="module-head">
+          <h2 id="conv-h">IOPS ↔ Throughput</h2>
+          <span class="tag">THROUGHPUT = IOPS × BLOCK SIZE</span>
+        </div>
+        <div class="solver" id="conv">
+          <div class="solve-row" data-key="iops">
+            <button class="solve-btn" type="button">IOPS<small>operations / s</small></button>
+            <div class="input-row"><input type="number" id="c-iops" min="0" step="any" value="20000" aria-label="IOPS"></div>
+          </div>
+          <div class="solve-row" data-key="bs">
+            <button class="solve-btn" type="button">Block size<small>per I/O</small></button>
+            <div class="input-row">
+              <input type="number" id="c-bs" min="0" step="any" value="8" aria-label="Block size">
+              <select id="c-bs-unit" aria-label="Block size unit">
+                <option value="1">B</option>
+                <option value="1024" selected>KiB</option>
+                <option value="1048576">MiB</option>
+              </select>
+            </div>
+          </div>
+          <div class="solve-row is-solved" data-key="tp">
+            <button class="solve-btn" type="button">Throughput<small>bandwidth</small></button>
+            <div class="input-row">
+              <input type="number" id="c-tp" min="0" step="any" aria-label="Throughput">
+              <select id="c-tp-unit" aria-label="Throughput unit">
+                <option value="1000000" selected>MB/s</option>
+                <option value="1048576">MiB/s</option>
+                <option value="1000000000">GB/s</option>
+                <option value="125000000">Gbit/s</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="readouts" id="c-readouts"></div>
+        <p class="hint">Block sizes are binary (4 KiB = 4,096 bytes), as storage tools report them. MB/s is decimal; MiB/s is binary.</p>
+      </section>
+
+      <!-- Block size table -->
+      <section class="module" aria-labelledby="tbl-h">
+        <div class="module-head">
+          <h2 id="tbl-h">Block size table</h2>
+          <span class="tag" id="tbl-tag"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Block size</th><th id="th-a">MB/s at IOPS</th><th id="th-b">IOPS for MB/s</th></tr></thead>
+            <tbody id="tbl-body"></tbody>
+          </table>
+        </div>
+        <p class="hint">Uses the IOPS and throughput from the converter above. The highlighted row is the current block size.</p>
+      </section>
+    </div>
+
+    <div class="col">
+      <!-- RAID -->
+      <section class="module" aria-labelledby="raid-h">
+        <div class="module-head">
+          <h2 id="raid-h">Array IOPS</h2>
+          <span class="tag">RAID WRITE PENALTY</span>
+        </div>
+        <div class="fields two">
+          <div class="field">
+            <label for="r-drive">Drive type</label>
+            <select class="solo" id="r-drive">
+              <option value="80" data-mbps="200">7,200 RPM HDD · ~80</option>
+              <option value="130" data-mbps="230">10K RPM HDD · ~130</option>
+              <option value="180" data-mbps="250" selected>15K RPM HDD · ~180</option>
+              <option value="50000" data-mbps="530">SATA SSD · ~50K</option>
+              <option value="100000" data-mbps="1100">SAS SSD · ~100K</option>
+              <option value="500000" data-mbps="6800">NVMe SSD · ~500K</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="r-per">IOPS per drive</label>
+            <div class="input-row"><input type="number" id="r-per" min="1" step="any" value="180"></div>
+          </div>
+          <div class="field">
+            <label for="r-n">Number of drives</label>
+            <div class="input-row"><input type="number" id="r-n" min="1" step="1" value="12"></div>
+          </div>
+          <div class="field">
+            <label for="r-raid">RAID level</label>
+            <select class="solo" id="r-raid">
+              <option value="0">RAID 0 · penalty 1</option>
+              <option value="1">RAID 1 · penalty 2</option>
+              <option value="10" selected>RAID 10 · penalty 2</option>
+              <option value="5">RAID 5 · penalty 4</option>
+              <option value="6">RAID 6 · penalty 6</option>
+              <option value="50">RAID 50 · penalty 4</option>
+              <option value="60">RAID 60 · penalty 6</option>
+            </select>
+          </div>
+        </div>
+        <div class="fields auto">
+          <div class="field">
+            <label for="r-mbps">MB/s per drive</label>
+            <div class="input-row"><input type="number" id="r-mbps" min="1" step="any" value="250"></div>
+          </div>
+          <div class="field">
+            <label for="r-cap">Drive capacity</label>
+            <div class="input-row">
+              <input type="number" id="r-cap" min="0" step="any" value="2.4">
+              <select id="r-cap-unit" aria-label="Capacity unit">
+                <option value="1000000000">GB</option>
+                <option value="1000000000000" selected>TB</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="r-spare">Hot spares</label>
+            <div class="input-row"><input type="number" id="r-spare" min="0" step="1" value="0"></div>
+          </div>
+          <div class="field" id="r-span-field" hidden>
+            <label for="r-span">Span groups</label>
+            <div class="input-row"><input type="number" id="r-span" min="2" step="1" value="2"></div>
+          </div>
+        </div>
+        <div class="field">
+          <div class="range-head"><label for="r-read">Read / write mix</label><output id="r-read-out" for="r-read"></output></div>
+          <input type="range" id="r-read" min="0" max="100" step="5" value="70">
+        </div>
+        <span class="chip" id="r-warn" hidden></span>
+        <div class="readouts" id="r-readouts"></div>
+        <div class="mix">
+          <div class="bar" aria-hidden="true"><div class="r" id="bar-r"></div><div class="w" id="bar-w"></div></div>
+          <div class="legend" id="r-legend"></div>
+        </div>
+        <div class="formula" id="r-formula"></div>
+        <div class="cap-block">
+          <span class="label">Capacity</span>
+          <div class="readouts" id="r-cap-readouts"></div>
+          <div class="mix">
+            <div class="bar" aria-hidden="true"><div class="r" id="cap-d"></div><div class="w" id="cap-p"></div><div class="s" id="cap-s"></div></div>
+            <div class="legend" id="cap-legend"></div>
+          </div>
+          <div class="formula" id="r-cap-formula"></div>
+        </div>
+        <div class="sizing">
+          <div class="field">
+            <label for="r-target">Drives needed for a target of</label>
+            <div class="input-row"><input type="number" id="r-target" min="0" step="any" value="5000" aria-label="Target IOPS"><select disabled aria-label="unit"><option>IOPS</option></select></div>
+          </div>
+          <div class="answer"><div class="v" id="r-need">–</div><div class="label" id="r-need-note">drives</div></div>
+        </div>
+      </section>
+
+      <!-- Little's law -->
+      <section class="module" aria-labelledby="ll-h">
+        <div class="module-head">
+          <h2 id="ll-h">Queue depth &amp; latency</h2>
+          <span class="tag">LITTLE'S LAW · QD = IOPS × LATENCY</span>
+        </div>
+        <div class="solver" id="ll">
+          <div class="solve-row" data-key="qd">
+            <button class="solve-btn" type="button">Queue depth<small>outstanding I/O</small></button>
+            <div class="input-row"><input type="number" id="l-qd" min="0" step="any" value="32" aria-label="Queue depth"></div>
+          </div>
+          <div class="solve-row" data-key="lat">
+            <button class="solve-btn" type="button">Latency<small>avg per I/O</small></button>
+            <div class="input-row">
+              <input type="number" id="l-lat" min="0" step="any" value="0.5" aria-label="Latency">
+              <select id="l-lat-unit" aria-label="Latency unit">
+                <option value="0.000001">µs</option>
+                <option value="0.001" selected>ms</option>
+              </select>
+            </div>
+          </div>
+          <div class="solve-row is-solved" data-key="iops">
+            <button class="solve-btn" type="button">IOPS<small>operations / s</small></button>
+            <div class="input-row"><input type="number" id="l-iops" min="0" step="any" aria-label="IOPS"></div>
+          </div>
+        </div>
+        <p class="hint" id="l-hint"></p>
+      </section>
+    </div>
+  </div>
+
+  <!-- Bottleneck -->
+  <section class="module" aria-labelledby="bn-h">
+    <div class="module-head">
+      <h2 id="bn-h">System bottleneck</h2>
+      <span class="tag">SYSTEM IOPS = MIN(DISKS, CPU, CONTROLLERS, NETWORK)</span>
+    </div>
+    <p class="hint">Uses the drives and RAID level from Array IOPS, and the block size and read/write mix from the converter. CPU, memory, controllers and network are per node, multiplied by the number of nodes.</p>
+    <div class="bn-layout">
+      <div class="bn-inputs">
+        <div class="group">
+          <h3>CPU</h3>
+          <div class="fields two">
+            <div class="field">
+              <label for="b-nodes">Storage nodes</label>
+              <div class="input-row"><input type="number" id="b-nodes" min="1" step="1" value="2"></div>
+            </div>
+            <div class="field">
+              <label for="b-sockets">CPUs per node</label>
+              <div class="input-row"><input type="number" id="b-sockets" min="1" step="1" value="2"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="b-cpu">CPU model</label>
+            <select class="solo" id="b-cpu">
+              <option value="12|2.0">Intel Xeon Silver 4410Y · 12C 2.0 GHz</option>
+              <option value="32|2.1" selected>Intel Xeon Gold 6430 · 32C 2.1 GHz</option>
+              <option value="32|2.5">Intel Xeon Gold 6548Y+ · 32C 2.5 GHz</option>
+              <option value="56|2.0">Intel Xeon Platinum 8480+ · 56C 2.0 GHz</option>
+              <option value="16|3.0">AMD EPYC 9124 · 16C 3.0 GHz</option>
+              <option value="32|3.25">AMD EPYC 9354 · 32C 3.25 GHz</option>
+              <option value="96|2.4">AMD EPYC 9654 · 96C 2.4 GHz</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="fields two">
+            <div class="field">
+              <label for="b-cores">Cores per CPU</label>
+              <div class="input-row"><input type="number" id="b-cores" min="1" step="1" value="32"></div>
+            </div>
+            <div class="field">
+              <label for="b-ghz">Clock, GHz</label>
+              <div class="input-row"><input type="number" id="b-ghz" min="0.1" step="any" value="2.1"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="b-stack">Storage software</label>
+            <select class="solo" id="b-stack">
+              <option value="3000">SPDK / polled NVMe · ~3K cycles per I/O</option>
+              <option value="15000" selected>Linux / Windows kernel + filesystem · ~15K</option>
+              <option value="40000">ZFS / storage OS · ~40K</option>
+              <option value="60000">vSAN / HCI · ~60K</option>
+              <option value="300000">Ceph OSD · ~300K</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="fields two">
+            <div class="field">
+              <label for="b-cycles">Cycles per I/O</label>
+              <div class="input-row"><input type="number" id="b-cycles" min="1" step="any" value="15000"></div>
+            </div>
+            <div class="field">
+              <label for="b-util">CPU for storage, %</label>
+              <div class="input-row"><input type="number" id="b-util" min="1" max="100" step="1" value="70"></div>
+            </div>
+          </div>
+          <div class="sum" id="b-cpu-sum"></div>
+        </div>
+
+        <div class="group">
+          <h3>Memory</h3>
+          <div class="fields two">
+            <div class="field">
+              <label for="b-dimm">DIMM size</label>
+              <select class="solo" id="b-dimm">
+                <option value="16">16 GB</option>
+                <option value="32">32 GB</option>
+                <option value="64" selected>64 GB</option>
+                <option value="96">96 GB</option>
+                <option value="128">128 GB</option>
+                <option value="256">256 GB</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="b-dimms">DIMMs per node</label>
+              <div class="input-row"><input type="number" id="b-dimms" min="0" step="1" value="8"></div>
+            </div>
+            <div class="field">
+              <label for="b-cache">RAM as read cache, %</label>
+              <div class="input-row"><input type="number" id="b-cache" min="0" max="100" step="1" value="50"></div>
+            </div>
+            <div class="field">
+              <label for="b-ws">Hot working set</label>
+              <div class="input-row">
+                <input type="number" id="b-ws" min="0" step="any" value="2">
+                <select id="b-ws-unit" aria-label="Working set unit">
+                  <option value="1">GB</option>
+                  <option value="1000" selected>TB</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="sum" id="b-mem-sum"></div>
+        </div>
+
+        <div class="group">
+          <h3>Controllers</h3>
+          <div class="field">
+            <label for="b-ctl">Controller type</label>
+            <select class="solo" id="b-ctl">
+              <option value="none">Direct-attached NVMe · no controller limit</option>
+              <option value="1000000|6.4" selected>SAS HBA / RAID, PCIe Gen3 x8 · ~1M IOPS, 6.4 GB/s</option>
+              <option value="2000000|13">Tri-mode RAID, PCIe Gen4 x8 · ~2M IOPS, 13 GB/s</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="fields auto">
+            <div class="field">
+              <label for="b-ctl-n">Per node</label>
+              <div class="input-row"><input type="number" id="b-ctl-n" min="0" step="1" value="1"></div>
+            </div>
+            <div class="field">
+              <label for="b-ctl-iops">IOPS each</label>
+              <div class="input-row"><input type="number" id="b-ctl-iops" min="0" step="any" value="1000000"></div>
+            </div>
+            <div class="field">
+              <label for="b-ctl-gbs">GB/s each</label>
+              <div class="input-row"><input type="number" id="b-ctl-gbs" min="0" step="any" value="6.4"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <h3>Network</h3>
+          <div class="field">
+            <label for="b-net">Port type</label>
+            <select class="solo" id="b-net">
+              <option value="0">Local storage · no network</option>
+              <option value="1250">10 GbE</option>
+              <option value="3125" selected>25 GbE</option>
+              <option value="5000">40 GbE</option>
+              <option value="12500">100 GbE</option>
+              <option value="1600">16G Fibre Channel</option>
+              <option value="3200">32G Fibre Channel</option>
+              <option value="6400">64G Fibre Channel</option>
+            </select>
+          </div>
+          <div class="fields two">
+            <div class="field">
+              <label for="b-ports">Ports per node</label>
+              <div class="input-row"><input type="number" id="b-ports" min="0" step="1" value="2"></div>
+            </div>
+            <div class="field">
+              <label for="b-neteff">Usable bandwidth, %</label>
+              <div class="input-row"><input type="number" id="b-neteff" min="1" max="100" step="1" value="90"></div>
+            </div>
+          </div>
+          <div class="sum" id="b-net-sum"></div>
+        </div>
+      </div>
+
+      <div class="bn-result" aria-live="polite">
+        <div class="readouts" id="b-readouts"></div>
+        <span class="chip" id="b-chip"></span>
+        <div class="limits" id="b-limits"></div>
+        <p class="hint" id="b-scale"></p>
+        <div class="formula" id="b-cache-line"></div>
+        <span class="chip" id="b-target" hidden></span>
+      </div>
+    </div>
+  </section>
+
+  <footer>Drive figures are typical small-block random IOPS and vary widely by model; use your drive's datasheet or a measured fio result for real sizing. The array model ignores controller cache, SSD write amplification and full-stripe writes, so treat it as a planning estimate. Usable capacity is before filesystem overhead and vendor reserve; drives are sold in decimal TB, while operating systems usually show binary TiB. The bottleneck model uses rough CPU cost per I/O and assumes reads are spread evenly over the hot working set, so the cache hit ratio is RAM cache ÷ working set (capped at 95%). Benchmark your own stack before you buy hardware.</footer>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const num = (el) => { const v = parseFloat(el.value); return isFinite(v) ? v : NaN; };
+
+  function fmt(v, maxDp) {
+    if (!isFinite(v)) return "–";
+    const a = Math.abs(v);
+    const dp = maxDp != null ? maxDp : a >= 1000 ? 0 : a >= 100 ? 1 : a >= 1 ? 2 : a >= 0.01 ? 3 : 5;
+    return v.toLocaleString("en-US", { maximumFractionDigits: dp });
+  }
+  // Value for a number input: trimmed, no grouping separators
+  function raw(v) {
+    if (!isFinite(v)) return "";
+    const a = Math.abs(v);
+    const dp = a >= 1000 ? 0 : a >= 100 ? 2 : a >= 1 ? 3 : 6;
+    return String(parseFloat(v.toFixed(dp)));
+  }
+  function bytesLabel(b) {
+    if (b >= 1048576) return fmt(b / 1048576, 2) + " MiB";
+    if (b >= 1024) return fmt(b / 1024, 2) + " KiB";
+    return fmt(b, 0) + " B";
+  }
+  function bigBytes(bps) { // bytes per second -> readable decimal volume
+    const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+    let i = 0, v = bps;
+    while (v >= 1000 && i < units.length - 1) { v /= 1000; i++; }
+    return { v: fmt(v, 2), u: units[i] };
+  }
+
+  // Generic solver wiring: clicking a row's label makes it the computed value
+  function makeSolver(rootId, initial, compute) {
+    const root = $(rootId);
+    let solved = initial;
+    const rows = root.querySelectorAll(".solve-row");
+    function paint() {
+      rows.forEach((r) => {
+        const on = r.dataset.key === solved;
+        r.classList.toggle("is-solved", on);
+        r.querySelector("input").readOnly = on;
+        r.querySelector(".solve-btn").setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      compute(solved);
+    }
+    rows.forEach((r) => {
+      r.querySelector(".solve-btn").addEventListener("click", () => { solved = r.dataset.key; paint(); });
+      r.querySelectorAll("input, select").forEach((el) => el.addEventListener("input", () => compute(solved)));
+    });
+    paint();
+    return { set(key) { solved = key; paint(); } };
+  }
+
+  /* ---------- Converter ---------- */
+  let conv = { iops: NaN, bytes: NaN, tpBps: NaN };
+  function computeConv(solved) {
+    const bsMul = num($("c-bs-unit")), tpMul = num($("c-tp-unit"));
+    let iops = num($("c-iops")), bytes = num($("c-bs")) * bsMul, tpBps = num($("c-tp")) * tpMul;
+    if (solved === "tp") { tpBps = iops * bytes; $("c-tp").value = raw(tpBps / tpMul); }
+    if (solved === "iops") { iops = bytes > 0 ? tpBps / bytes : NaN; $("c-iops").value = raw(iops); }
+    if (solved === "bs") { bytes = iops > 0 ? tpBps / iops : NaN; $("c-bs").value = raw(bytes / bsMul); }
+    conv = { iops, bytes, tpBps };
+
+    const day = bigBytes(tpBps * 86400);
+    const items = [
+      { v: fmt(tpBps / 1e6), u: "MB/s", big: true },
+      { v: fmt(tpBps / 1048576), u: "MiB/s" },
+      { v: fmt(tpBps * 8 / 1e9), u: "Gbit/s on the wire" },
+      { v: fmt(iops * 60), u: "I/O per minute" },
+      { v: day.v, u: day.u + " per day" },
+    ];
+    $("c-readouts").innerHTML = items.map((i) =>
+      `<div class="readout"><span class="v${i.big ? " big" : ""}">${i.v}</span><span class="u">${i.u}</span></div>`).join("");
+    renderTable();
+    computeBn();
+  }
+
+  /* ---------- Block size table ---------- */
+  const SIZES = [512, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576];
+  const NOTES = { 4096: "OLTP, VMs", 8192: "databases", 65536: "SQL Server, backup", 262144: "streaming", 1048576: "sequential" };
+  function renderTable() {
+    const { iops, bytes, tpBps } = conv;
+    $("th-a").textContent = `MB/s at ${fmt(iops, 0)} IOPS`;
+    $("th-b").textContent = `IOPS for ${fmt(tpBps / 1e6)} MB/s`;
+    $("tbl-tag").textContent = "512 B – 1 MiB";
+    $("tbl-body").innerHTML = SIZES.map((s) => {
+      const cur = Math.abs(s - bytes) < 0.5 ? " class=\"current\"" : "";
+      const note = NOTES[s] ? `<span class="note">${NOTES[s]}</span>` : "";
+      return `<tr${cur}><td>${bytesLabel(s)}${note}</td><td>${fmt(iops * s / 1e6)}</td><td>${fmt(tpBps / s, 0)}</td></tr>`;
+    }).join("");
+  }
+
+  /* ---------- RAID ---------- */
+  // data(n, spans) = drives' worth of usable space; perSpan = minimum drives in each span group
+  const RAID = {
+    0:  { p: 1, min: 1, name: "RAID 0", data: (n) => n, how: "n" },
+    1:  { p: 2, min: 2, even: true, name: "RAID 1", data: (n) => n / 2, how: "n ÷ 2" },
+    10: { p: 2, min: 4, even: true, name: "RAID 10", data: (n) => n / 2, how: "n ÷ 2" },
+    5:  { p: 4, min: 3, name: "RAID 5", data: (n) => n - 1, how: "n − 1" },
+    6:  { p: 6, min: 4, name: "RAID 6", data: (n) => n - 2, how: "n − 2" },
+    50: { p: 4, perSpan: 3, name: "RAID 50", data: (n, s) => n - s, how: "n − spans" },
+    60: { p: 6, perSpan: 4, name: "RAID 60", data: (n, s) => n - 2 * s, how: "n − 2 × spans" },
+  };
+  function fmtCap(bytes) {
+    if (!isFinite(bytes)) return { v: "–", u: "" };
+    const tb = bytes / 1e12;
+    return tb >= 1000 ? { v: fmt(tb / 1000, 2), u: "PB" } : tb >= 1 ? { v: fmt(tb, 2), u: "TB" } : { v: fmt(bytes / 1e9, 1), u: "GB" };
+  }
+  function fmtCapBin(bytes) {
+    const tib = bytes / 1099511627776;
+    return tib >= 1 ? fmt(tib, 2) + " TiB" : fmt(bytes / 1073741824, 1) + " GiB";
+  }
+  function computeRaid() {
+    const per = num($("r-per")), total = Math.floor(num($("r-n")));
+    const spares = Math.max(0, Math.floor(num($("r-spare")) || 0));
+    const n = total - spares;              // drives in the array, excluding hot spares
+    const key = $("r-raid").value;
+    const base = RAID[key];
+    const spanned = !!base.perSpan;
+    $("r-span-field").hidden = !spanned;
+    const spans = spanned ? Math.max(2, Math.floor(num($("r-span")) || 2)) : 1;
+    const lvl = Object.assign({}, base, spanned ? { min: base.perSpan * spans, multiple: spans } : {});
+    const r = num($("r-read")) / 100, w = 1 - r, P = lvl.p;
+    $("r-read-out").textContent = `${Math.round(r * 100)}% read · ${Math.round(w * 100)}% write`;
+
+    const rawIops = n * per;
+    const cost = r + w * P;                // back-end I/Os per front-end I/O
+    const eff = rawIops / cost;
+    const rd = eff * r, wr = eff * w;
+
+    const warns = [];
+    if (n < lvl.min) warns.push(`${lvl.name} needs at least ${lvl.min} drives`);
+    if (lvl.even && n % 2) warns.push(`${lvl.name} needs an even number of drives`);
+    if (lvl.multiple && n % lvl.multiple) warns.push(`${n} drives don't split evenly into ${spans} spans`);
+    if (spares >= total) warns.push("Hot spares leave no drives for the array");
+    $("r-warn").hidden = !warns.length;
+    $("r-warn").textContent = warns.join(" · ");
+
+    const items = [
+      { v: fmt(eff, 0), u: "usable front-end IOPS", big: true },
+      { v: fmt(rawIops, 0), u: "raw back-end IOPS" },
+      { v: fmt(rd, 0), u: "read IOPS" },
+      { v: fmt(wr, 0), u: "write IOPS" },
+      { v: fmt(wr * P, 0), u: `back-end writes (×${P})` },
+    ];
+    $("r-readouts").innerHTML = items.map((i) =>
+      `<div class="readout"><span class="v${i.big ? " big" : ""}">${i.v}</span><span class="u">${i.u}</span></div>`).join("");
+
+    $("bar-r").style.width = (r * 100) + "%";
+    $("bar-w").style.width = (w * 100) + "%";
+    $("r-legend").innerHTML =
+      `<span><i style="background:var(--accent)"></i>read ${fmt(rd, 0)}</span>` +
+      `<span><i style="background:var(--write)"></i>write ${fmt(wr, 0)}</span>`;
+    $("r-formula").textContent =
+      `${fmt(n, 0)} × ${fmt(per, 0)} ÷ (${r.toFixed(2)} + ${w.toFixed(2)} × ${P}) = ${fmt(eff, 0)} IOPS`;
+
+    /* Capacity */
+    const capB = num($("r-cap")) * num($("r-cap-unit"));
+    const dataDrives = n > 0 ? Math.max(0, lvl.data(n, spans)) : 0;
+    const protDrives = Math.max(0, n - dataDrives);
+    const rawB = total * capB, usableB = dataDrives * capB;
+    const eff2 = rawB > 0 ? usableB / rawB : NaN;
+    const rawC = fmtCap(rawB), useC = fmtCap(usableB), protC = fmtCap(protDrives * capB), spareC = fmtCap(spares * capB);
+    const capItems = [
+      { v: useC.v, u: `${useC.u} usable`, big: true },
+      { v: isFinite(usableB) ? fmtCapBin(usableB) : "–", u: "as the OS reports it" },
+      { v: rawC.v, u: `${rawC.u} raw` },
+      { v: isFinite(eff2) ? fmt(eff2 * 100, 1) + "%" : "–", u: "efficiency" },
+    ];
+    $("r-cap-readouts").innerHTML = capItems.map((i) =>
+      `<div class="readout"><span class="v${i.big ? " big" : ""}">${i.v}</span><span class="u">${i.u}</span></div>`).join("");
+    const pct = (d) => (total > 0 ? (d / total) * 100 : 0) + "%";
+    $("cap-d").style.width = pct(dataDrives);
+    $("cap-p").style.width = pct(protDrives);
+    $("cap-s").style.width = pct(spares);
+    $("cap-legend").innerHTML =
+      `<span><i style="background:var(--accent)"></i>data ${useC.v} ${useC.u}</span>` +
+      `<span><i style="background:var(--write)"></i>${key === "1" || key === "10" ? "mirror" : "parity"} ${protC.v} ${protC.u}</span>` +
+      (spares ? `<span><i style="background:var(--muted)"></i>spares ${spareC.v} ${spareC.u}</span>` : "");
+    $("r-cap-formula").textContent =
+      `(${lvl.how.replace("n", fmt(n, 0)).replace("spans", spans)}) × ${fmt(num($("r-cap")))} ${$("r-cap-unit").selectedOptions[0].text} = ${useC.v} ${useC.u}` +
+      (spares ? ` · ${spares} spare${spares > 1 ? "s" : ""} excluded` : "");
+
+    const target = num($("r-target"));
+    let need = per > 0 && target > 0 ? Math.ceil(target * cost / per) : NaN;
+    if (isFinite(need)) {
+      need = Math.max(need, lvl.min);
+      if (lvl.even && need % 2) need++;
+      if (lvl.multiple) need = Math.ceil(need / lvl.multiple) * lvl.multiple;
+      need += spares;
+    }
+    $("r-need").textContent = isFinite(need) ? fmt(need, 0) : "–";
+    $("r-need-note").textContent = spares ? `drives incl. ${spares} spare${spares > 1 ? "s" : ""}` : "drives";
+
+    arr = { n, per, mbps: num($("r-mbps")), r, w, P, target };
+    computeBn();
+  }
+  $("r-drive").addEventListener("change", () => {
+    const opt = $("r-drive").selectedOptions[0];
+    if (opt.value !== "custom") { $("r-per").value = opt.value; $("r-mbps").value = opt.dataset.mbps; }
+    computeRaid();
+  });
+  $("r-mbps").addEventListener("input", computeRaid);
+  $("r-per").addEventListener("input", () => {
+    const match = [...$("r-drive").options].find((o) => o.value === $("r-per").value);
+    $("r-drive").value = match ? match.value : "custom";
+    computeRaid();
+  });
+  ["r-n", "r-raid", "r-read", "r-target", "r-cap", "r-cap-unit", "r-spare", "r-span"].forEach((id) => $(id).addEventListener("input", computeRaid));
+
+  /* ---------- Little's law ---------- */
+  function computeLL(solved) {
+    const mul = num($("l-lat-unit"));
+    let qd = num($("l-qd")), lat = num($("l-lat")) * mul, iops = num($("l-iops"));
+    if (solved === "iops") { iops = lat > 0 ? qd / lat : NaN; $("l-iops").value = raw(iops); }
+    if (solved === "qd") { qd = iops * lat; $("l-qd").value = raw(qd); }
+    if (solved === "lat") { lat = iops > 0 ? qd / iops : NaN; $("l-lat").value = raw(lat / mul); }
+    const perQ = isFinite(lat) && lat > 0 ? 1 / lat : NaN;
+    $("l-hint").textContent = isFinite(iops)
+      ? `${fmt(qd)} I/Os in flight at ${fmt(lat * 1000, 3)} ms each sustain ${fmt(iops, 0)} IOPS. One outstanding I/O at this latency gives ${fmt(perQ, 0)} IOPS.`
+      : "Enter two values to solve the third.";
+  }
+
+  /* ---------- System bottleneck ---------- */
+  let arr = null;
+  // Keep a preset select in sync with the fields it fills; editing a field switches it to Custom
+  function linkPreset(selId, fieldIds, split) {
+    const sel = $(selId);
+    sel.addEventListener("change", () => {
+      if (sel.value !== "custom" && sel.value !== "none") split(sel.value).forEach((v, i) => { $(fieldIds[i]).value = v; });
+      computeBn();
+    });
+    fieldIds.forEach((id) => $(id).addEventListener("input", () => {
+      const vals = fieldIds.map((f) => $(f).value);
+      const match = [...sel.options].find((o) => o.value !== "custom" && o.value !== "none" &&
+        split(o.value).every((v, i) => parseFloat(v) === parseFloat(vals[i])));
+      sel.value = match ? match.value : "custom";
+      computeBn();
+    }));
+  }
+  linkPreset("b-cpu", ["b-cores", "b-ghz"], (v) => v.split("|"));
+  linkPreset("b-stack", ["b-cycles"], (v) => [v]);
+  linkPreset("b-ctl", ["b-ctl-iops", "b-ctl-gbs"], (v) => v.split("|"));
+  ["b-nodes", "b-sockets", "b-util", "b-dimm", "b-dimms", "b-cache", "b-ws", "b-ws-unit", "b-ctl-n", "b-net", "b-ports", "b-neteff"]
+    .forEach((id) => $(id).addEventListener("input", computeBn));
+
+  function computeBn() {
+    if (!arr || !isFinite(conv.bytes)) return;
+    const bs = conv.bytes;
+    const nodes = Math.max(1, Math.floor(num($("b-nodes")) || 1));
+
+    // CPU: cycles available for storage ÷ cycles each I/O costs
+    const cores = nodes * num($("b-sockets")) * num($("b-cores"));
+    const hz = cores * num($("b-ghz")) * 1e9 * num($("b-util")) / 100;
+    const cpuIops = hz / num($("b-cycles"));
+    $("b-cpu-sum").innerHTML = `<b>${fmt(cores, 0)}</b> cores total · <b>${fmt(hz / 1e9, 1)}</b> GHz for storage`;
+
+    // Memory: reads that hit the RAM cache never reach the disks
+    const ramGB = nodes * num($("b-dimm")) * num($("b-dimms"));
+    const cacheGB = ramGB * num($("b-cache")) / 100;
+    const wsGB = num($("b-ws")) * num($("b-ws-unit"));
+    const hit = wsGB > 0 && cacheGB > 0 ? Math.min(0.95, cacheGB / wsGB) : 0;
+    $("b-mem-sum").innerHTML = `<b>${fmt(ramGB, 0)} GB</b> RAM total · <b>${fmt(cacheGB, 0)} GB</b> cache · <b>${fmt(hit * 100, 1)}%</b> read hit ratio`;
+
+    // Disks: back-end I/Os per front-end I/O, with cached reads removed
+    const { n, per, mbps, r, w, P, target } = arr;
+    const costNoCache = r + w * P;
+    const cost = r * (1 - hit) + w * P;
+    const diskIopsLimit = n * per / cost;
+    const diskBwLimit = n * mbps * 1e6 / cost / bs;
+    const diskIops = Math.min(diskIopsLimit, diskBwLimit);
+    const diskNoCache = Math.min(n * per / costNoCache, n * mbps * 1e6 / costNoCache / bs);
+
+    // Controllers: an IOPS ceiling and a bandwidth ceiling
+    const noCtl = $("b-ctl").value === "none";
+    const ctlCount = nodes * num($("b-ctl-n"));
+    const ctlIops = noCtl ? Infinity : Math.min(ctlCount * num($("b-ctl-iops")), ctlCount * num($("b-ctl-gbs")) * 1e9 / bs);
+    ["b-ctl-n", "b-ctl-iops", "b-ctl-gbs"].forEach((id) => { $(id).disabled = noCtl; });
+
+    // Network: usable bandwidth ÷ block size
+    const portMBps = num($("b-net"));
+    const local = portMBps === 0;
+    const netBps = nodes * num($("b-ports")) * portMBps * 1e6 * num($("b-neteff")) / 100;
+    const netIops = local ? Infinity : netBps / bs;
+    ["b-ports", "b-neteff"].forEach((id) => { $(id).disabled = local; });
+    $("b-net-sum").innerHTML = local ? "Clients run on the storage nodes, so the network is not in the I/O path."
+      : `<b>${fmt(netBps * 8 / 1e9, 1)}</b> Gbit/s usable · <b>${fmt(netBps / 1e6, 0)}</b> MB/s`;
+
+    const limits = [
+      { name: "Disks", iops: diskIops, note: diskBwLimit < diskIopsLimit ? "drive MB/s" : "drive IOPS" },
+      { name: "CPU", iops: cpuIops },
+      { name: "Controllers", iops: ctlIops },
+      { name: "Network", iops: netIops },
+    ];
+    const finite = limits.filter((l) => isFinite(l.iops) && l.iops > 0);
+    const sys = finite.length ? Math.min(...finite.map((l) => l.iops)) : NaN;
+    const bott = finite.find((l) => l.iops === sys);
+
+    const tp = sys * bs;
+    $("b-readouts").innerHTML = [
+      { v: fmt(sys, 0), u: "system IOPS", big: true },
+      { v: fmt(tp / 1e6), u: "MB/s" },
+      { v: fmt(tp * 8 / 1e9), u: "Gbit/s" },
+    ].map((i) => `<div class="readout"><span class="v${i.big ? " big" : ""}">${i.v}</span><span class="u">${i.u}</span></div>`).join("");
+    $("b-chip").textContent = bott ? `Bottleneck: ${bott.name.toLowerCase()}${bott.note ? ` (${bott.note})` : ""}` : "Enter hardware values";
+
+    // Log scale, so limits that differ by orders of magnitude stay comparable
+    const logs = finite.map((l) => Math.log10(l.iops));
+    const lo = Math.floor(Math.min(...logs)), hi = Math.max(lo + 1, Math.ceil(Math.max(...logs)));
+    $("b-limits").innerHTML = limits.map((l) => {
+      const ok = isFinite(l.iops) && l.iops > 0;
+      const width = ok ? Math.max(2, (Math.log10(l.iops) - lo) / (hi - lo) * 100) : 0;
+      const head = ok && l !== bott ? ` · ${fmt(l.iops / sys, 1)}× headroom` : ok ? " · limit" : "";
+      const val = ok ? `<b>${fmt(l.iops, 0)}</b> IOPS · ${fmt(l.iops * bs / 1e6, 0)} MB/s${head}` : "no limit";
+      return `<div class="limit${l === bott ? " is-min" : ""}"><span class="name">${l.name}</span>` +
+        `<div class="track"><div class="fill" style="width:${width}%"></div></div><span class="val">${val}</span></div>`;
+    }).join("");
+    $("b-scale").textContent = finite.length ? `Bars use a log scale from ${fmt(10 ** lo, 0)} to ${fmt(10 ** hi, 0)} IOPS, at ${bytesLabel(bs)} per I/O.` : "";
+
+    $("b-cache-line").textContent = hit > 0
+      ? `RAM cache: ${fmt(hit * 100, 1)}% of reads skip the disks, so the disks serve ${fmt(diskIops, 0)} IOPS instead of ${fmt(diskNoCache, 0)}`
+      : "RAM cache: no read hits, so the disks serve every I/O";
+
+    const tc = $("b-target");
+    tc.hidden = !(target > 0 && isFinite(sys));
+    if (!tc.hidden) {
+      const meets = sys >= target;
+      tc.classList.toggle("ok", meets);
+      tc.textContent = meets ? `Meets the ${fmt(target, 0)} IOPS target with ${fmt((sys / target - 1) * 100, 0)}% headroom`
+        : `${fmt(target - sys, 0)} IOPS short of the ${fmt(target, 0)} IOPS target`;
+    }
+  }
+
+  /* ---------- Workload presets ---------- */
+  const WORKLOADS = [
+    { id: "oltp", name: "OLTP database", bs: 8, read: 70, note: "small random I/O, latency sensitive (SQL Server, Oracle, PostgreSQL)" },
+    { id: "vdi", name: "VDI", bs: 4, read: 30, note: "steady-state desktops are write heavy; boot storms flip to mostly reads" },
+    { id: "vm", name: "Virtual servers", bs: 16, read: 60, note: "mixed general-purpose VMs on a shared datastore" },
+    { id: "mail", name: "Email", bs: 32, read: 60, note: "Exchange-style mailbox databases" },
+    { id: "file", name: "File server", bs: 64, read: 80, note: "SMB/NFS shares with mostly reads of documents and media" },
+    { id: "dw", name: "Analytics", bs: 256, read: 90, note: "large sequential scans for data warehouse and reporting" },
+    { id: "backup", name: "Backup target", bs: 512, read: 5, note: "large sequential writes; reads only during restores" },
+    { id: "video", name: "Video streaming", bs: 1024, read: 95, note: "large sequential reads" },
+  ];
+  let activePreset = null;
+  $("presets").innerHTML = WORKLOADS.map((p) =>
+    `<button type="button" class="preset" data-id="${p.id}" aria-pressed="false">${p.name}<small>${p.bs >= 1024 ? p.bs / 1024 + " MiB" : p.bs + " KiB"} · ${p.read}/${100 - p.read}</small></button>`).join("");
+  function paintPresets() {
+    document.querySelectorAll(".preset").forEach((b) => b.setAttribute("aria-pressed", b.dataset.id === activePreset ? "true" : "false"));
+    const p = WORKLOADS.find((x) => x.id === activePreset);
+    $("wl-hint").textContent = p
+      ? `${p.name}: ${p.note}. Set block size to ${p.bs >= 1024 ? p.bs / 1024 + " MiB" : p.bs + " KiB"} and the mix to ${p.read}% read / ${100 - p.read}% write.`
+      : "Pick a workload to fill in a typical block size and read/write mix, then adjust any value yourself.";
+  }
+  $("presets").addEventListener("click", (e) => {
+    const btn = e.target.closest(".preset");
+    if (!btn) return;
+    const p = WORKLOADS.find((x) => x.id === btn.dataset.id);
+    $("c-bs").value = p.bs; $("c-bs-unit").value = "1024";
+    $("r-read").value = p.read;
+    activePreset = p.id;
+    paintPresets();
+    convSolver.set("tp");  // keep IOPS, recompute throughput for the new block size
+    computeRaid();
+  });
+  ["c-bs", "c-bs-unit", "r-read"].forEach((id) => $(id).addEventListener("input", () => {
+    if (activePreset) { activePreset = null; paintPresets(); }
+  }));
+
+  const convSolver = makeSolver("conv", "tp", computeConv);
+  makeSolver("ll", "iops", computeLL);
+  computeRaid();
+})();
+</script>
+</body>
+</html>
